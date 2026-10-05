@@ -10,8 +10,9 @@ import { RenderPass } from 'postprocessing';
 import { EffectPass } from 'postprocessing';
 import { BloomEffect } from 'postprocessing';
 import { SMAAEffect } from 'postprocessing';
-import { getOrbitPositions, getPositionAtTime, EARTH_RADIUS_KM } from '@/lib/orbit';
+import { getOrbitPositions, getPositionAtTime, eciToWorld, earthRotationAngle, EARTH_RADIUS_KM } from '@/lib/orbit';
 import { orbitLineMeshes, satelliteMarkers } from '@/lib/store';
+import { getSunDirection } from '@/lib/sun';
 
 // Try multiple candidate paths and return the first texture that loads
 async function loadFirstAvailableTexture(loader, candidates) {
@@ -83,6 +84,7 @@ export default function GlobeScene({
     // Earth with day/night shader
     const earthGroup = new THREE.Group();
     earthGroup.name = 'earthGroup'; // Name it so we can find it later
+    earthGroup.rotation.y = earthRotationAngle(simTime);
     const sunDirOnMount = getSunDirection(simTime);
     const earth = createEarth(earthMaterialRef, sunDirOnMount);
     earthGroup.add(earth);
@@ -211,11 +213,9 @@ export default function GlobeScene({
   useEffect(() => {
     if (!simTime || !sceneRef.current) return;
 
-    // 1) Spin the Earth by UTC time so continents pass under the terminator
-    const hours = simTime.getUTCHours() + simTime.getUTCMinutes() / 60 + simTime.getUTCSeconds() / 3600;
-    const rotationAngle = (hours * 15) * (Math.PI / 180); // 15° per hour
+    // 1) Spin the Earth by sidereal time (GMST) so it stays aligned with the ECI frame
     const earthGroup = sceneRef.current.getObjectByName('earthGroup');
-    if (earthGroup) earthGroup.rotation.y = rotationAngle;
+    if (earthGroup) earthGroup.rotation.y = earthRotationAngle(simTime);
 
     // 2) True Sun direction in world space (includes seasonal tilt/declination)
     const sunDir = getSunDirection(simTime); // THREE.Vector3 already normalized
@@ -362,23 +362,6 @@ function removeSatellite(scene, noradIdStr) {
     marker.material.dispose?.();
     delete satelliteMarkers[noradIdStr];
   }
-}
-
-// Very lightweight approximate sun direction in ECI-like frame
-// Returns a normalized THREE.Vector3
-function getSunDirection(date) {
-  const d = (Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(),
-    date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()) - Date.UTC(2000, 0, 1, 12, 0, 0)) / 86400000;
-  const g = 357.529 + 0.98560028 * d; // mean anomaly (deg)
-  const q = 280.459 + 0.98564736 * d; // mean longitude (deg)
-  const L = q + 1.915 * Math.sin(g * Math.PI / 180) + 0.020 * Math.sin(2 * g * Math.PI / 180);
-  const e = 23.439 - 0.00000036 * d; // obliquity (deg)
-  const Lr = L * Math.PI / 180;
-  const er = e * Math.PI / 180;
-  const x = Math.cos(Lr);
-  const y = Math.cos(er) * Math.sin(Lr);
-  const z = Math.sin(er) * Math.sin(Lr);
-  return new THREE.Vector3(x, y, z).normalize();
 }
 
 function createEarth(earthMaterialRef, initialSunDir = new THREE.Vector3(1, 0, 0)) {
@@ -564,7 +547,7 @@ function drawOrbitPath(noradId, tle1, tle2, scene, epoch, color = 0x00ffff) {
 
   const positions = [];
   for (const [x, y, z] of pts) {
-    positions.push(x, y, z);
+    positions.push(...eciToWorld({ x, y, z }));
   }
 
   if (positions.length >= 3) {
@@ -631,7 +614,7 @@ function createSatelliteMarker(noradId, tle1, tle2, scene, color = 0xffff00) {
   // Initial position
   const pos = getPositionAtTime(tle1, tle2, new Date());
   if (pos) {
-    sprite.position.set(pos.x, pos.y, pos.z);
+    sprite.position.set(...eciToWorld(pos));
   }
 }
 
@@ -641,7 +624,7 @@ function updateMarkerPosition(noradId, tle1, tle2, simTime) {
 
   const pos = getPositionAtTime(tle1, tle2, simTime);
   if (pos) {
-    marker.position.set(pos.x, pos.y, pos.z);
+    marker.position.set(...eciToWorld(pos));
   }
 }
 

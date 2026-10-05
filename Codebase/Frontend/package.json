@@ -9,7 +9,8 @@
     "build": "next build --webpack",
     "start": "next start -p 3000",
     "start:3001": "next start -p 3001",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:frames": "node scripts/check-frames.mjs"
   },
   "dependencies": {
     "next": "16.0.0",
