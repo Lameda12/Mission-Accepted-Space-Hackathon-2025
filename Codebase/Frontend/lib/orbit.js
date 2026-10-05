@@ -15,8 +15,12 @@ export function earthRotationAngle(date) {
   return gstime(date);
 }
 
-export function getOrbitPositions(tle1, tle2, numPoints = 150, startDate = new Date()) {
-  const satrec = twoline2satrec(tle1, tle2);
+// Parse once per satellite and reuse; twoline2satrec is the expensive step.
+export function parseTle(tle1, tle2) {
+  return twoline2satrec(tle1, tle2);
+}
+
+export function getOrbitPositions(satrec, numPoints = 150, startDate = new Date()) {
   const start = startDate instanceof Date ? startDate : new Date(startDate);
   const periodMinutes = (2 * Math.PI) / satrec.no;
   const dtMs = (periodMinutes * 60 * 1000) / numPoints;
@@ -34,8 +38,7 @@ export function getOrbitPositions(tle1, tle2, numPoints = 150, startDate = new D
   return points;
 }
 
-export function getPositionAtTime(tle1, tle2, date) {
-  const satrec = twoline2satrec(tle1, tle2);
+export function getPositionAtTime(satrec, date) {
   const pv = propagate(satrec, date);
 
   if (!pv?.position) return null;
@@ -44,8 +47,7 @@ export function getPositionAtTime(tle1, tle2, date) {
   return { x, y, z };
 }
 
-export function getGroundTrack(tle1, tle2, durationMin = 90, stepSec = 30) {
-  const satrec = twoline2satrec(tle1, tle2);
+export function getGroundTrack(satrec, durationMin = 90, stepSec = 30) {
   const start = new Date();
   const numPoints = Math.floor((durationMin * 60) / stepSec);
   const points = [];

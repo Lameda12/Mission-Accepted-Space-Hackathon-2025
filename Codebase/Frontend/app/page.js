@@ -2,41 +2,47 @@
 import { useEffect, useState, useRef } from 'react';
 import GlobeScene from '@/components/GlobeScene';
 import socket from '@/utils/socket';
+import { createSimClock } from '@/lib/simClock';
+
+// The sim clock ticks inside the render loop; the sidebar clock only needs a few updates a second
+const DISPLAY_REFRESH_MS = 250;
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export default function Page() {
   const [sats, setSats] = useState([]);
   const [selected, setSelected] = useState([]);  // Changed to array for multiple satellites
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Time control state
-  const [simTime, setSimTime] = useState(null);
+  // Time control state: clockRef is the source of truth, displayTime is for the sidebar only
+  const clockRef = useRef(null);
+  const [displayTime, setDisplayTime] = useState(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
   // Track window size for responsive layout
   const [isMobile, setIsMobile] = useState(false);
 
-  // Initialize simTime on client side only to avoid hydration mismatch
+  // Create the clock on the client only to avoid a hydration mismatch
   useEffect(() => {
-    if (!simTime) setSimTime(new Date());
-    setIsMobile(window.innerWidth <= 768);
+    clockRef.current ??= createSimClock();
+    setDisplayTime(new Date(clockRef.current.now()));
+    const interval = setInterval(() => setDisplayTime(new Date(clockRef.current.now())), DISPLAY_REFRESH_MS);
 
+    setIsMobile(window.innerWidth <= 768);
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [simTime]);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   // Visual toggles
   const [showAtmosphere, setShowAtmosphere] = useState(true);
   const [showClouds, setShowClouds] = useState(true);
   const [showBloom, setShowBloom] = useState(true);
 
-  const animationFrameRef = useRef(null);
-  const lastTimeRef = useRef(Date.now());
-
   const [tleById, setTleById] = useState(new Map());
-
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   useEffect(() => {
     const handler = (data) => {
@@ -44,7 +50,6 @@ export default function Page() {
         const meta = tleById.get(d.norad_id) || {};
         return { ...d, ...meta };
       });
-      console.log('Received positions (merged):', merged);
       setSats(merged);
     };
 
@@ -55,7 +60,7 @@ export default function Page() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${backendUrl}/api/satellites`);
+        const r = await fetch(`${BACKEND_URL}/api/satellites`);
         const meta = await r.json();
         const map = new Map(meta.map(m => [m.norad_id, { tle1: m.tle1, tle2: m.tle2, name: m.name }]));
         setTleById(map);
@@ -65,43 +70,26 @@ export default function Page() {
     })();
   }, []);
 
-  // Time playback loop
-  useEffect(() => {
-    if (!isPlaying || !simTime) {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      return;
-    }
-
-    const animate = () => {
-      const now = Date.now();
-      const deltaMs = (now - lastTimeRef.current) * playbackSpeed;
-      lastTimeRef.current = now;
-
-      setSimTime(prev => prev ? new Date(prev.getTime() + deltaMs) : new Date());
-      animationFrameRef.current = requestAnimationFrame(animate);
-    };
-
-    lastTimeRef.current = Date.now();
-    animationFrameRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [isPlaying, playbackSpeed, simTime]);
-
   const filteredSats = sats.filter(s =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.norad_id.toString().includes(searchTerm)
   );
 
+  const togglePlaying = () => {
+    clockRef.current.setPlaying(!isPlaying);
+    setIsPlaying(!isPlaying);
+  };
+
+  const changeSpeed = (speed) => {
+    clockRef.current.setSpeed(speed);
+    setPlaybackSpeed(speed);
+  };
+
   const resetToNow = () => {
-    setSimTime(new Date());
+    clockRef.current.setPlaying(false);
+    clockRef.current.set(Date.now());
     setIsPlaying(false);
+    setDisplayTime(new Date(clockRef.current.now()));
   };
 
   const formatDate = (date) => {
@@ -116,7 +104,7 @@ export default function Page() {
     });
   };
 
-  if (!simTime) {
+  if (!displayTime) {
     return <div style={{ color: '#fff', padding: '20px' }}>Initializing Earth...</div>;
   }
 
@@ -242,12 +230,12 @@ export default function Page() {
           </h4>
 
           <div style={{ fontSize: '12px', marginBottom: '12px', color: '#a0aab8' }}>
-            {formatDate(simTime)}
+            {formatDate(displayTime)}
           </div>
 
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <button
-              onClick={() => setIsPlaying(!isPlaying)}
+              onClick={togglePlaying}
               style={{
                 flex: 1,
                 padding: '8px 16px',
@@ -296,7 +284,7 @@ export default function Page() {
               max="12"
               step="1"
               value={Math.log2(playbackSpeed)}
-              onChange={(e) => setPlaybackSpeed(Math.pow(2, Number(e.target.value)))}
+              onChange={(e) => changeSpeed(Math.pow(2, Number(e.target.value)))}
               list="speed-ticks"
               style={{
                 width: '100%',
@@ -369,12 +357,11 @@ export default function Page() {
 
       <main>
         <GlobeScene
-          selectedSatellites={selected}  // Changed to array
-          simTime={simTime}
+          selectedSatellites={selected}
+          clockRef={clockRef}
           showAtmosphere={showAtmosphere}
           showClouds={showClouds}
           showBloom={showBloom}
-          livePositions={sats}
         />
       </main>
     </div>

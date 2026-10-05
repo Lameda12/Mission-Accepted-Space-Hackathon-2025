@@ -119,6 +119,7 @@ Recipe for this codebase: one `THREE.Points` (or `InstancedMesh`) with a `Float3
 - [x] 2.1, 2.2: ECI → scene mapping (`eciToWorld`), Earth spun by GMST, sun model moved to `lib/sun.js`. `npm run check:frames` raycasts the real globe mesh: satellites land within 0.18° of their geodetic subpoint and the sun within 0.5° of an independent subsolar point. The old code fails all 20 checks, by up to 178°.
 - [x] 2.5: backend uses `EarthSatellite.from_satrec`, so subpoints now match satellite.js (the old code was 14 to 40 km off).
 - [x] Found during verification: `propagate()` returns `null` in satellite.js v6 when SGP4 fails (M3MSAT's stale TLE does), which crashed `lib/orbit.js`. Fresh installs also crashed the Socket.IO connect handler (`flask-socketio` 5.3 vs Flask 3.1.3, now pinned `~=5.6`), and `/api/satellites` had no CORS header.
+- [x] 2.6: sim time lives in `lib/simClock.js` and is read inside the render loop (no React state per frame); satrecs parsed once; orbit materials reused and redrawn once per orbital period; bloom toggle fixed (stale closure); duplicate effects, `lib/store.js`, `SatelliteFeed.jsx` and 6 always-404 texture requests removed; line resolution follows resize. Headless Chromium, 5 satellites: main-thread script time 692 → 46 ms/s at 1x and 750 → 51 ms/s at 4096x. The old 200 ms debounce rebuilt every orbit with a new `LineMaterial` whenever frames were slow, recompiling shaders constantly (~590 ms/s).
 - [ ] Remaining Sprint 1 items below.
 
 **Sprint 1, compress and correct (about 1 to 2 days)**
