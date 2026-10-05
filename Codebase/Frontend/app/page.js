@@ -1,369 +1,270 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GlobeScene from '@/components/GlobeScene';
-import socket from '@/utils/socket';
+import TopBar from '@/components/TopBar';
+import CatalogPanel from '@/components/CatalogPanel';
+import TelemetryCard from '@/components/TelemetryCard';
+import TimeBar from '@/components/TimeBar';
 import { createSimClock } from '@/lib/simClock';
+import { buildRecords, REGIMES } from '@/lib/catalog';
+import featured from '@/data/featured.json';
 
-// The sim clock ticks inside the render loop; the sidebar clock only needs a few updates a second
+// The sim clock ticks inside the render loop; the HUD only needs a few updates a second
 const DISPLAY_REFRESH_MS = 250;
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+const MAX_TRACKED = 12;
+const ISS_ID = '25544';
+const DEFAULT_OBSERVER = { lat: 44.6488, lon: -63.5752, label: 'Halifax, NS' };
+const OBSERVER_STORAGE_KEY = 'satellocator:observer';
+const featuredById = new Map(featured.map((f) => [f.norad_id, f]));
+
+function readStoredObserver() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(OBSERVER_STORAGE_KEY));
+    if (Number.isFinite(stored?.lat) && Number.isFinite(stored?.lon)) return stored;
+  } catch {
+    // storage unavailable or corrupt: fall back to the default
+  }
+  return DEFAULT_OBSERVER;
+}
 
 export default function Page() {
-  const [sats, setSats] = useState([]);
-  const [selected, setSelected] = useState([]);  // Changed to array for multiple satellites
-  const [searchTerm, setSearchTerm] = useState('');
-
-  // Time control state: clockRef is the source of truth, displayTime is for the sidebar only
   const clockRef = useRef(null);
-  const [displayTime, setDisplayTime] = useState(null);
+  // Sim time and wall-clock time, sampled together for the HUD
+  const [tick, setTick] = useState(null);
+  const now = tick?.sim ?? null;
   const [isPlaying, setIsPlaying] = useState(true);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [speed, setSpeed] = useState(1);
 
-  // Track window size for responsive layout
-  const [isMobile, setIsMobile] = useState(false);
+  const [catalog, setCatalog] = useState(null);
+  const [catalogError, setCatalogError] = useState(null);
+  const [kp, setKp] = useState(null);
 
-  // Create the clock on the client only to avoid a hydration mismatch
-  useEffect(() => {
-    clockRef.current ??= createSimClock();
-    setDisplayTime(new Date(clockRef.current.now()));
-    const interval = setInterval(() => setDisplayTime(new Date(clockRef.current.now())), DISPLAY_REFRESH_MS);
+  const [search, setSearch] = useState('');
+  const [visibleRegimes, setVisibleRegimes] = useState(() => new Set(Object.keys(REGIMES)));
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [catalogOpen, setCatalogOpen] = useState(false);
 
-    setIsMobile(window.innerWidth <= 768);
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handleResize);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
-
-  // Visual toggles
+  const [observer, setObserver] = useState(DEFAULT_OBSERVER);
+  const [locating, setLocating] = useState(false);
   const [showAtmosphere, setShowAtmosphere] = useState(true);
-  const [showClouds, setShowClouds] = useState(true);
   const [showBloom, setShowBloom] = useState(true);
 
-  const [tleById, setTleById] = useState(new Map());
-
+  // Client-only setup: clock, HUD refresh, stored observer
   useEffect(() => {
-    const handler = (data) => {
-      const merged = data.map(d => {
-        const meta = tleById.get(d.norad_id) || {};
-        return { ...d, ...meta };
-      });
-      setSats(merged);
-    };
-
-    socket.on('positions', handler);
-    return () => socket.off('positions', handler);
-  }, [tleById]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch(`${BACKEND_URL}/api/satellites`);
-        const meta = await r.json();
-        const map = new Map(meta.map(m => [m.norad_id, { tle1: m.tle1, tle2: m.tle2, name: m.name }]));
-        setTleById(map);
-      } catch (e) {
-        console.error('Failed to fetch /api/satellites:', e);
-      }
-    })();
+    clockRef.current ??= createSimClock();
+    const sample = () => setTick({ sim: new Date(clockRef.current.now()), realMs: Date.now() });
+    sample();
+    const interval = setInterval(sample, DISPLAY_REFRESH_MS);
+    setObserver(readStoredObserver());
+    return () => clearInterval(interval);
   }, []);
 
-  const filteredSats = sats.filter(s =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.norad_id.toString().includes(searchTerm)
+  // Catalog and space weather
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/catalog', { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error(`Catalog request failed (${r.status})`);
+        return r.json();
+      })
+      .then((data) => {
+        const records = buildRecords(data.objects);
+        const byId = new Map(records.map((r) => [r.id, r]));
+        const maxEpochMs = records.reduce((m, r) => Math.max(m, r.epochMs), 0);
+        setCatalog({ ...data, records, byId, maxEpochMs, objects: undefined });
+
+        const fromUrl = new URLSearchParams(window.location.search).get('sat');
+        const initial = [fromUrl, ISS_ID, featured[1]?.norad_id].find((id) => id && byId.has(id));
+        if (initial) {
+          setSelectedIds([initial]);
+          setActiveId(initial);
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') setCatalogError(err.message);
+      });
+
+    fetch('/api/space-weather', { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setKp)
+      .catch(() => {});
+
+    return () => controller.abort();
+  }, []);
+
+  // Keep ?sat= in sync so a view can be shared
+  useEffect(() => {
+    if (!catalog) return;
+    const url = new URL(window.location.href);
+    if (activeId) url.searchParams.set('sat', activeId);
+    else url.searchParams.delete('sat');
+    window.history.replaceState(null, '', url);
+  }, [activeId, catalog]);
+
+  const selected = useMemo(
+    () => (catalog ? selectedIds.map((id) => catalog.byId.get(id)).filter(Boolean) : []),
+    [selectedIds, catalog],
   );
 
-  const togglePlaying = () => {
-    clockRef.current.setPlaying(!isPlaying);
-    setIsPlaying(!isPlaying);
-  };
+  const select = useCallback((id) => {
+    if (!id) return;
+    setSelectedIds((prev) => (prev.includes(id) ? prev : [...prev, id].slice(-MAX_TRACKED)));
+    setActiveId(id);
+    setCatalogOpen(false);
+  }, []);
 
-  const changeSpeed = (speed) => {
-    clockRef.current.setSpeed(speed);
-    setPlaybackSpeed(speed);
-  };
+  const remove = useCallback((id) => {
+    const next = selectedIds.filter((x) => x !== id);
+    setSelectedIds(next);
+    if (activeId === id) setActiveId(next.at(-1) ?? null);
+  }, [selectedIds, activeId]);
 
-  const resetToNow = () => {
-    clockRef.current.setPlaying(false);
-    clockRef.current.set(Date.now());
-    setIsPlaying(false);
-    setDisplayTime(new Date(clockRef.current.now()));
-  };
-
-  const formatDate = (date) => {
-    if (!date) return 'Loading...';
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
+  const toggleRegime = useCallback((key) => {
+    setVisibleRegimes((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
     });
+  }, []);
+
+  const togglePlaying = useCallback(() => {
+    const next = !clockRef.current.isPlaying();
+    clockRef.current.setPlaying(next);
+    setIsPlaying(next);
+  }, []);
+
+  const changeSpeed = (s) => {
+    clockRef.current.setSpeed(s);
+    setSpeed(s);
+    if (!isPlaying) {
+      clockRef.current.setPlaying(true);
+      setIsPlaying(true);
+    }
   };
 
-  if (!displayTime) {
-    return <div style={{ color: '#fff', padding: '20px' }}>Initializing Earth...</div>;
-  }
+  const goLive = () => {
+    clockRef.current.set(Date.now());
+    clockRef.current.setSpeed(1);
+    clockRef.current.setPlaying(true);
+    setSpeed(1);
+    setIsPlaying(true);
+    setTick({ sim: new Date(clockRef.current.now()), realMs: Date.now() });
+  };
+
+  const locate = () => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const next = { lat: coords.latitude, lon: coords.longitude, label: 'Your location' };
+        setObserver(next);
+        try {
+          localStorage.setItem(OBSERVER_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+          // storage unavailable: the location still applies for this visit
+        }
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 },
+    );
+  };
+
+  // Space toggles play/pause unless the user is typing or on a button
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.code !== 'Space' || e.target.closest('input, textarea, button')) return;
+      e.preventDefault();
+      togglePlaying();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [togglePlaying]);
+
+  if (!tick) return null;
+
+  const catalogStatus = catalogError
+    ? { state: 'error', detail: catalogError }
+    : !catalog
+      ? { state: 'loading', detail: 'Loading the satellite catalog' }
+      : catalog.source === 'celestrak'
+        ? {
+          state: 'live',
+          count: catalog.records.length,
+          ageMs: tick.realMs - Date.parse(catalog.generatedAt),
+          detail: 'CelesTrak GP data (OMM), refreshed every 2 hours',
+        }
+        : {
+          state: 'degraded',
+          count: catalog.records.length,
+          ageMs: tick.realMs - catalog.maxEpochMs,
+          detail: `CelesTrak was unreachable (${catalog.error ?? 'unknown error'}); showing the bundled snapshot`,
+        };
+
+  const active = activeId ? catalog?.byId.get(activeId) : null;
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: isMobile ? '1fr' : '360px 1fr',
-      gridTemplateRows: isMobile ? 'auto 1fr' : '1fr',
-      height: '100vh',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-    }}>
-      <aside style={{
-        padding: isMobile ? '16px' : '20px',
-        background: 'linear-gradient(180deg, #0a0e1a 0%, #0d1321 100%)',
-        color: '#e0e6ed',
-        overflowY: 'auto',
-        borderRight: isMobile ? 'none' : '1px solid #1a2332',
-        borderBottom: isMobile ? '1px solid #1a2332' : 'none',
-        maxHeight: isMobile ? '40vh' : '100vh'
-      }}>
-        <h2 style={{ margin: '0 0 20px 0', fontSize: '24px', fontWeight: '600', color: '#fff' }}>
-          SatelLocator
-        </h2>
-
-        {/* Search */}
-        <div style={{ marginBottom: '20px' }}>
-          <input
-            type="text"
-            placeholder="Search satellites..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              background: '#1a2332',
-              border: '1px solid #2a3442',
-              borderRadius: '6px',
-              color: '#fff',
-              fontSize: '14px',
-              outline: 'none',
-              transition: 'border-color 0.2s'
-            }}
-            onFocus={(e) => e.target.style.borderColor = '#4488ff'}
-            onBlur={(e) => e.target.style.borderColor = '#2a3442'}
-          />
-        </div>
-
-        {/* Satellite selection - Multi-select */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500', color: '#a0aab8' }}>
-            Select Satellites (multiple)
-          </label>
-          <div style={{ maxHeight: '200px', overflowY: 'auto', background: '#1a2332', border: '1px solid #2a3442', borderRadius: '6px', padding: '8px' }}>
-            {filteredSats.map((s) => {
-              const isSelected = selected.some(sel => sel.norad_id === s.norad_id);
-              return (
-                <label
-                  key={s.norad_id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '8px',
-                    cursor: 'pointer',
-                    background: isSelected ? '#2a3442' : 'transparent',
-                    borderRadius: '4px',
-                    marginBottom: '4px'
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelected([...selected, s]);
-                      } else {
-                        setSelected(selected.filter(sel => sel.norad_id !== s.norad_id));
-                      }
-                    }}
-                    style={{ marginRight: '10px', accentColor: '#4488ff' }}
-                  />
-                  <span style={{ color: '#e0e6ed', fontSize: '13px' }}>{s.name}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Selected satellites info */}
-        {selected.length > 0 && (
-          <div style={{ marginBottom: '20px' }}>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#a0aab8' }}>
-              Tracking {selected.length} satellite{selected.length > 1 ? 's' : ''}
-            </h4>
-            {selected.map((sat) => (
-              <div
-                key={sat.norad_id}
-                style={{
-                  marginBottom: '8px',
-                  padding: '12px',
-                  background: '#1a2332',
-                  borderRadius: '6px',
-                  border: '1px solid #2a3442',
-                  fontSize: '12px'
-                }}
-              >
-                <div style={{ fontWeight: '600', color: '#fff', marginBottom: '4px' }}>{sat.name}</div>
-                <div style={{ color: '#a0aab8' }}>NORAD: {sat.norad_id}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Time controls */}
-        <div style={{
-          marginBottom: '20px',
-          padding: '16px',
-          background: '#1a2332',
-          borderRadius: '8px',
-          border: '1px solid #2a3442'
-        }}>
-          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#fff' }}>
-            Time Control
-          </h4>
-
-          <div style={{ fontSize: '12px', marginBottom: '12px', color: '#a0aab8' }}>
-            {formatDate(displayTime)}
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-            <button
-              onClick={togglePlaying}
-              style={{
-                flex: 1,
-                padding: '8px 16px',
-                background: isPlaying ? '#ff4444' : '#4488ff',
-                border: 'none',
-                borderRadius: '6px',
-                color: '#fff',
-                fontSize: '13px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'opacity 0.2s'
-              }}
-              onMouseOver={(e) => e.target.style.opacity = '0.8'}
-              onMouseOut={(e) => e.target.style.opacity = '1'}
-            >
-              {isPlaying ? '⏸ Pause' : '▶ Play'}
-            </button>
-
-            <button
-              onClick={resetToNow}
-              style={{
-                padding: '8px 16px',
-                background: '#2a3442',
-                border: '1px solid #3a4452',
-                borderRadius: '6px',
-                color: '#fff',
-                fontSize: '13px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'background 0.2s'
-              }}
-              onMouseOver={(e) => e.target.style.background = '#3a4452'}
-              onMouseOut={(e) => e.target.style.background = '#2a3442'}
-            >
-              Now
-            </button>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: '#a0aab8' }}>
-              Speed: {playbackSpeed.toFixed(0)}x
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="12"
-              step="1"
-              value={Math.log2(playbackSpeed)}
-              onChange={(e) => changeSpeed(Math.pow(2, Number(e.target.value)))}
-              list="speed-ticks"
-              style={{
-                width: '100%',
-                accentColor: '#4488ff'
-              }}
-            />
-
-            <datalist id="speed-ticks">
-              {Array.from({ length: 13 }, (_, i) => (
-                <option key={i} value={i} />
-              ))}
-            </datalist>
-
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              fontSize: '11px', 
-              color: '#6a7481', 
-              marginTop: '4px' 
-            }}>
-              <span>Normal</span>
-              <span>4096x</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Visual toggles */}
-        <div style={{
-          padding: '16px',
-          background: '#1a2332',
-          borderRadius: '8px',
-          border: '1px solid #2a3442'
-        }}>
-          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#fff' }}>
-            Visual Settings
-          </h4>
-
-          <label style={{ display: 'flex', alignItems: 'center', marginBottom: '10px', cursor: 'pointer', fontSize: '13px' }}>
-            <input
-              type="checkbox"
-              checked={showAtmosphere}
-              onChange={(e) => setShowAtmosphere(e.target.checked)}
-              style={{ marginRight: '10px', accentColor: '#4488ff' }}
-            />
-            <span style={{ color: '#e0e6ed' }}>Atmosphere Glow</span>
-          </label>
-
-          <label style={{ display: 'flex', alignItems: 'center', marginBottom: '10px', cursor: 'pointer', fontSize: '13px' }}>
-            <input
-              type="checkbox"
-              checked={showClouds}
-              onChange={(e) => setShowClouds(e.target.checked)}
-              style={{ marginRight: '10px', accentColor: '#4488ff' }}
-            />
-            <span style={{ color: '#e0e6ed' }}>Cloud Layer</span>
-          </label>
-
-          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '13px' }}>
-            <input
-              type="checkbox"
-              checked={showBloom}
-              onChange={(e) => setShowBloom(e.target.checked)}
-              style={{ marginRight: '10px', accentColor: '#4488ff' }}
-            />
-            <span style={{ color: '#e0e6ed' }}>Bloom Effect</span>
-          </label>
-        </div>
-
-      </aside>
-
-      <main>
-        <GlobeScene
-          selectedSatellites={selected}
-          clockRef={clockRef}
-          showAtmosphere={showAtmosphere}
-          showClouds={showClouds}
-          showBloom={showBloom}
+    <main>
+      <GlobeScene
+        records={catalog?.records}
+        visibleRegimes={visibleRegimes}
+        selected={selected}
+        activeId={activeId}
+        observer={observer}
+        clockRef={clockRef}
+        showAtmosphere={showAtmosphere}
+        showBloom={showBloom}
+        onPick={select}
+      />
+      <TopBar
+        now={now}
+        catalogStatus={catalogStatus}
+        kp={kp}
+        catalogOpen={catalogOpen}
+        onToggleCatalog={() => setCatalogOpen((o) => !o)}
+      />
+      <CatalogPanel
+        records={catalog?.records}
+        byId={catalog?.byId ?? EMPTY_MAP}
+        featured={featured}
+        search={search}
+        onSearch={setSearch}
+        visibleRegimes={visibleRegimes}
+        onToggleRegime={toggleRegime}
+        selectedIds={selectedIds}
+        activeId={activeId}
+        onSelect={select}
+        onRemove={remove}
+        open={catalogOpen}
+      />
+      {active && (
+        <TelemetryCard
+          record={active}
+          meta={featuredById.get(active.id)}
+          now={now}
+          observer={observer}
+          onLocate={locate}
+          locating={locating}
+          onClose={() => setActiveId(null)}
         />
-      </main>
-    </div>
+      )}
+      <TimeBar
+        now={now}
+        realNowMs={tick.realMs}
+        isPlaying={isPlaying}
+        speed={speed}
+        onTogglePlay={togglePlaying}
+        onSpeed={changeSpeed}
+        onLive={goLive}
+        showAtmosphere={showAtmosphere}
+        onToggleAtmosphere={() => setShowAtmosphere((v) => !v)}
+        showBloom={showBloom}
+        onToggleBloom={() => setShowBloom((v) => !v)}
+      />
+    </main>
   );
 }
+
+const EMPTY_MAP = new Map();

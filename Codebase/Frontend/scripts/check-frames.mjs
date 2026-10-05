@@ -40,11 +40,7 @@ function check(label, got, want, tolDeg) {
 
 // 1) Satellites: texture point under the marker must equal the geodetic subpoint.
 // Geocentric vs geodetic latitude differ by up to ~0.19°, hence the tolerance.
-const readJson = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url)));
-const sats = [...new Map([
-  ...readJson('../../Backend/data/satellites.json'),
-  ...readJson('../public/data/Satellite-TLE-Data.json'),
-].map((s) => [s.norad_id, s])).values()];
+const sats = JSON.parse(readFileSync(new URL('../data/featured.json', import.meta.url)));
 const date = new Date();
 for (const s of sats) {
   const satrec = twoline2satrec(s.tle1, s.tle2);

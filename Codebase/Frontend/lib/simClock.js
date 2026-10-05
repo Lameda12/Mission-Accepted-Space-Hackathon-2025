@@ -15,6 +15,7 @@ export function createSimClock(startMs = Date.now()) {
 
   return {
     now,
+    isPlaying: () => playing,
     setSpeed(next) {
       reanchor();
       speed = next;

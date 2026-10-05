@@ -109,26 +109,28 @@ The project was developed during the **Mission Accepted: Space Hackathon 2025** 
 
 ## ⚙️ Setup & Run
 
-### Backend (Flask)
-```bash
-cd Codebase/backend
-pip install -r requirements.txt
-python app.py
-```
+The post-hackathon MVP is a single Next.js app (the Flask backend was retired: the API routes now live in the app):
 
-### Frontend (Next.js)
 ```bash
-cd Codebase/frontend
-cp .env.example .env.local
-# Example:
-# NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
+cd Codebase/Frontend
 npm install
 npm run dev
 ```
 
-Then open **[http://localhost:3000](http://localhost:3000)** to launch **SatelLocator**.
+Then open **[http://localhost:3000](http://localhost:3000)**. See `Codebase/Frontend/README.md` for checks, deployment and architecture. The original hackathon version (Flask + Socket.IO backend) is in git history at commit `e48bac1`.
 
+---
 
+## 🛰️ After the Hackathon
+
+The hackathon build was upgraded into a deployable MVP:
+
+- Coordinate frames fixed: orbits, sun and Earth rotation now agree (verified by raycasting the globe against SGP4 subpoints)
+- Full active catalog (~15k objects) from CelesTrak in OMM format, refreshed every 2 hours, propagated in a Web Worker
+- Pass predictions for the viewer's location, validated against Skyfield
+- Space-weather Kp indicator, mission-control UI, shareable `?sat=` links
+
+Research and progress notes: `Description/upgrade-research.md`.
 
 ## 🏁 Hackathon Context
 
