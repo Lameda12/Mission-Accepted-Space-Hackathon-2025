@@ -1,0 +1,274 @@
+{
+  "observer": {
+    "lat": 44.6488,
+    "lon": -63.5752
+  },
+  "hours": 48,
+  "minElevationDeg": 10.0,
+  "cases": [
+    {
+      "name": "RADARSAT-2",
+      "startMs": 1761338820000,
+      "passes": [
+        {
+          "riseMs": 1761339302868,
+          "peakMs": 1761339594951,
+          "maxElevationDeg": 41.9303,
+          "setMs": 1761339888634
+        },
+        {
+          "riseMs": 1761345312476,
+          "peakMs": 1761345573763,
+          "maxElevationDeg": 26.6773,
+          "setMs": 1761345837017
+        },
+        {
+          "riseMs": 1761383277079,
+          "peakMs": 1761383413290,
+          "maxElevationDeg": 12.7278,
+          "setMs": 1761383549140
+        },
+        {
+          "riseMs": 1761389109280,
+          "peakMs": 1761389424049,
+          "maxElevationDeg": 84.7303,
+          "setMs": 1761389736669
+        },
+        {
+          "riseMs": 1761395203550,
+          "peakMs": 1761395346671,
+          "maxElevationDeg": 13.2617,
+          "setMs": 1761395489617
+        },
+        {
+          "riseMs": 1761424018703,
+          "peakMs": 1761424267600,
+          "maxElevationDeg": 24.7354,
+          "setMs": 1761424517495
+        },
+        {
+          "riseMs": 1761429920135,
+          "peakMs": 1761430220809,
+          "maxElevationDeg": 47.7691,
+          "setMs": 1761430524081
+        },
+        {
+          "riseMs": 1761473772786,
+          "peakMs": 1761474080158,
+          "maxElevationDeg": 53.9428,
+          "setMs": 1761474385358
+        },
+        {
+          "riseMs": 1761479790932,
+          "peakMs": 1761480028383,
+          "maxElevationDeg": 22.3441,
+          "setMs": 1761480265223
+        },
+        {
+          "riseMs": 1761508779694,
+          "peakMs": 1761508947953,
+          "maxElevationDeg": 14.7851,
+          "setMs": 1761509116249
+        }
+      ]
+    },
+    {
+      "name": "CASSIOPE",
+      "startMs": 1761387540000,
+      "passes": [
+        {
+          "riseMs": 1761395169731,
+          "peakMs": 1761395319099,
+          "maxElevationDeg": 72.324,
+          "setMs": 1761395472564
+        },
+        {
+          "riseMs": 1761439665036,
+          "peakMs": 1761439844426,
+          "maxElevationDeg": 21.211,
+          "setMs": 1761440004972
+        },
+        {
+          "riseMs": 1761445440012,
+          "peakMs": 1761445628583,
+          "maxElevationDeg": 23.5136,
+          "setMs": 1761445795973
+        },
+        {
+          "riseMs": 1761481219635,
+          "peakMs": 1761481369557,
+          "maxElevationDeg": 82.4064,
+          "setMs": 1761481525481
+        },
+        {
+          "riseMs": 1761525714310,
+          "peakMs": 1761525894455,
+          "maxElevationDeg": 22.1383,
+          "setMs": 1761526055112
+        },
+        {
+          "riseMs": 1761531503462,
+          "peakMs": 1761531679041,
+          "maxElevationDeg": 21.3243,
+          "setMs": 1761531836172
+        }
+      ]
+    },
+    {
+      "name": "GHGSAT-C1",
+      "startMs": 1761462000000,
+      "passes": [
+        {
+          "riseMs": 1761491663355,
+          "peakMs": 1761491850350,
+          "maxElevationDeg": 82.0158,
+          "setMs": 1761492035399
+        },
+        {
+          "riseMs": 1761529232935,
+          "peakMs": 1761529386238,
+          "maxElevationDeg": 23.7079,
+          "setMs": 1761529540573
+        },
+        {
+          "riseMs": 1761534767928,
+          "peakMs": 1761534891799,
+          "maxElevationDeg": 16.4005,
+          "setMs": 1761535016387
+        },
+        {
+          "riseMs": 1761575097210,
+          "peakMs": 1761575215629,
+          "maxElevationDeg": 15.6219,
+          "setMs": 1761575333461
+        },
+        {
+          "riseMs": 1761580566134,
+          "peakMs": 1761580722230,
+          "maxElevationDeg": 24.604,
+          "setMs": 1761580877282
+        },
+        {
+          "riseMs": 1761618070823,
+          "peakMs": 1761618256662,
+          "maxElevationDeg": 86.4644,
+          "setMs": 1761618444173
+        }
+      ]
+    },
+    {
+      "name": "MOST",
+      "startMs": 1761436500000,
+      "passes": [
+        {
+          "riseMs": 1761474932826,
+          "peakMs": 1761475255988,
+          "maxElevationDeg": 75.7802,
+          "setMs": 1761475575576
+        },
+        {
+          "riseMs": 1761481020101,
+          "peakMs": 1761481224130,
+          "maxElevationDeg": 17.3591,
+          "setMs": 1761481427390
+        },
+        {
+          "riseMs": 1761510071291,
+          "peakMs": 1761510315722,
+          "maxElevationDeg": 22.4108,
+          "setMs": 1761510560476
+        },
+        {
+          "riseMs": 1761515979092,
+          "peakMs": 1761516296619,
+          "maxElevationDeg": 57.2111,
+          "setMs": 1761516616562
+        },
+        {
+          "riseMs": 1761560111194,
+          "peakMs": 1761560424386,
+          "maxElevationDeg": 50.1815,
+          "setMs": 1761560734225
+        },
+        {
+          "riseMs": 1761566155355,
+          "peakMs": 1761566410977,
+          "maxElevationDeg": 24.6629,
+          "setMs": 1761566665185
+        },
+        {
+          "riseMs": 1761595317502,
+          "peakMs": 1761595503707,
+          "maxElevationDeg": 15.7403,
+          "setMs": 1761595689894
+        },
+        {
+          "riseMs": 1761601142640,
+          "peakMs": 1761601466611,
+          "maxElevationDeg": 85.0656,
+          "setMs": 1761601792385
+        },
+        {
+          "riseMs": 1761607414569,
+          "peakMs": 1761607519027,
+          "maxElevationDeg": 11.4487,
+          "setMs": 1761607623918
+        }
+      ]
+    },
+    {
+      "name": "CANX-4",
+      "startMs": 1761452340000,
+      "passes": [
+        {
+          "riseMs": 1761476269893,
+          "peakMs": 1761476464387,
+          "maxElevationDeg": 21.1561,
+          "setMs": 1761476659897
+        },
+        {
+          "riseMs": 1761481978816,
+          "peakMs": 1761482221994,
+          "maxElevationDeg": 39.7495,
+          "setMs": 1761482467241
+        },
+        {
+          "riseMs": 1761524361622,
+          "peakMs": 1761524590664,
+          "maxElevationDeg": 28.8002,
+          "setMs": 1761524818997
+        },
+        {
+          "riseMs": 1761530134098,
+          "peakMs": 1761530359636,
+          "maxElevationDeg": 28.7816,
+          "setMs": 1761530585422
+        },
+        {
+          "riseMs": 1761563797940,
+          "peakMs": 1761564026873,
+          "maxElevationDeg": 31.6195,
+          "setMs": 1761564257171
+        },
+        {
+          "riseMs": 1761569585205,
+          "peakMs": 1761569800217,
+          "maxElevationDeg": 25.3407,
+          "setMs": 1761570017189
+        },
+        {
+          "riseMs": 1761611915208,
+          "peakMs": 1761612168013,
+          "maxElevationDeg": 45.4443,
+          "setMs": 1761612420111
+        },
+        {
+          "riseMs": 1761617734411,
+          "peakMs": 1761617921467,
+          "maxElevationDeg": 19.4351,
+          "setMs": 1761618108482
+        }
+      ]
+    }
+  ]
+}
